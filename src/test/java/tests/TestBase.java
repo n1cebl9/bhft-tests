@@ -1,26 +1,75 @@
 package tests;
 
-import managers.ApiManager;
+import interfaces.RestInterface;
+import interfaces.WebSocketInterface;
+import managers.TodoAppManager;
 import managers.ValidationManager;
-import ws.Client;
+import data.RestApiParameters;
+import managers.WebSocketManager;
+import org.testng.annotations.AfterMethod;
+import pojo.Message;
+import utils.TodoAppRestApiClient;
+import pojo.Todo;
+import utils.TodoAppWebSocketClient;
+
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.Properties;
 
 public abstract class TestBase {
 
-    // could be replaced with environment variables
-    private static final String HTTP = "http://127.0.0.1:8080";
-    // ! port 8080 to connect to websocket
-    private static final String WEBSOCKET = "ws://127.0.0.1:8080/ws";
-    private static final String LOGIN = "admin";
-    private static final String PASS = "admin";
+    // gradle.properties that could be used at any time during the test execution
+    protected static Properties properties;
 
-    protected static ApiManager apiManager;
+    // singleton variables
+    protected static TodoAppManager todoAppManager;
     protected static ValidationManager validationManager;
-    protected static Client webSocketClient;
+    protected static WebSocketManager webSocketManager;
 
     static {
-        apiManager = new ApiManager(HTTP, LOGIN, PASS);
-        webSocketClient = new Client(WEBSOCKET);
+        try {
+            // try to read gradle.properties file
+            properties = loadProperties();
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+
+        RestApiParameters restApiParameters = new RestApiParameters(
+                properties.getProperty("todoApp.url"),
+                properties.getProperty("todoApp.login"),
+                properties.getProperty("todoApp.password")
+        );
+
+        // prepare rest api client and manager
+        RestInterface<Todo> restApiClient = new TodoAppRestApiClient(restApiParameters);
+        todoAppManager = new TodoAppManager(restApiClient);
+
         validationManager = new ValidationManager();
+
+        // prepare websocket client and manager
+        WebSocketInterface<Message> webSocketClient = new TodoAppWebSocketClient(properties.getProperty("todoApp.ws"));
+        webSocketManager = new WebSocketManager(webSocketClient);
+    }
+
+
+    private static Properties loadProperties() throws IOException {
+        Properties properties = new Properties();
+
+        try {
+            InputStream input = new FileInputStream("gradle.properties");
+            properties.load(input);
+        } catch (IOException ex) {
+            System.out.println("properties not found");
+            throw new IOException();
+        }
+
+        return properties;
+    }
+
+    @AfterMethod
+    public void closeWebSocketSession() {
+        webSocketManager.closeSession();
     }
 
 }

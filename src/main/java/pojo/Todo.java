@@ -13,10 +13,10 @@ import lombok.Setter;
 public class Todo {
 
     @JsonProperty("id")
-    private long id;
+    private Long id;
     @JsonProperty("text")
     private String text;
     @JsonProperty("completed")
-    private boolean completed;
+    private Boolean completed;
 
 }

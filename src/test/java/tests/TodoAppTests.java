@@ -1,7 +1,9 @@
 package tests;
 
+import data.TodoDataParameters;
 import dataModels.TodoAppDataModel;
 import org.testng.annotations.AfterMethod;
+import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.DataProvider;
 import org.testng.annotations.Test;
 
@@ -9,20 +11,37 @@ public class TodoAppTests extends TestBase {
 
     /*
     Allure report preparation and logging not implemented
-    Negative cases not implemented
+
+    GET request is performed in each validation test to check how todoapp works
 
     Cases:
-    - integration CRUD + ws checks
-        - id and completed values
-            - -1 [not implemented, manual checks]
-            - 0 and true
-            - 1 and false
-        - text values
-            - alphanumeric
-            - text is "&"
-            - text is "   "
-            - text is "1"
-            - text is empty
+    - POST and GET
+        - id == -1 (code 400)
+        - id == null (code 400)
+        - id == 0
+        - id == 1
+        - text == ''
+        - text == null (code 400)
+        - text == '   '
+        - text == '&'
+        - text == '1'
+        - text is random string
+        - completed == true
+        - completed == false
+        - completed == null (code 400)
+    - PUT and GET
+        - put new text == ''
+        - put new text == null (code 401, existing should not be updated)
+        - put new text == '   '
+        - put new text == '&'
+        - put new text == '1'
+        - put new text is random string
+        - change completed status
+        - todos is not exist [manual check]
+    - DELETE and GET
+        - regular
+        - unauthorized [manual check]
+        - todos is not exist [manual check]
     - GET parameters
         - only offset
         - only limit
@@ -34,84 +53,221 @@ public class TodoAppTests extends TestBase {
         - 1000
         - 5000
         - 10000
+    - websocket
+        - id and completed values
+        - text values
 
      */
 
+    // to ensure that there is no old data and test is clean
+    @BeforeMethod
+    public void beforeMethod() {
+        todoAppManager
+                .deleteAll();
+    }
+
     @DataProvider
-    public Object[] integrationDataProvider() {
+    public Object[] postAndGetDataProvider() {
         return new Object[] {
-                new TodoAppDataModel()
-                        .setCaseDescription("id and completed values")
-                        .prepareData(0, "", true)
-                        .prepareData(1, "", false),
-                new TodoAppDataModel()
-                        .setCaseDescription("text values")
-                        .prepareData()
-                        .prepareData("&")
-                        .prepareData("   ")
-                        .prepareData("1")
-                        .prepareData("")
+                // id field
+                new TodoAppDataModel("id == -1")
+                        .prepareData(
+                                new TodoDataParameters()
+                                        .withStatusCode(400)
+                                        .withId(-1L)
+                ),
+                new TodoAppDataModel("id == null")
+                        .prepareData(
+                                new TodoDataParameters()
+                                        .withStatusCode(400)
+                                        .withId(null)
+                ),
+                new TodoAppDataModel("id == 0")
+                        .prepareData(
+                                new TodoDataParameters()
+                                        .withId(0L)
+                ),
+                new TodoAppDataModel("id == 1")
+                        .prepareData(
+                                new TodoDataParameters()
+                                        .withId(1L)
+                ),
+                // text field
+                new TodoAppDataModel("text == ''")
+                        .prepareData(
+                                new TodoDataParameters()
+                                        .withText("")
+                ),
+                new TodoAppDataModel("text == null")
+                        .prepareData(
+                                new TodoDataParameters()
+                                        .withStatusCode(400)
+                                        .withText(null)
+                ),
+                new TodoAppDataModel("text == '   '")
+                        .prepareData(
+                                new TodoDataParameters()
+                                        .withText("   ")
+                ),
+                new TodoAppDataModel("text == '&'")
+                        .prepareData(
+                                new TodoDataParameters()
+                                        .withText("&")
+                ),
+                new TodoAppDataModel("text == '1'")
+                        .prepareData(
+                                new TodoDataParameters()
+                                        .withText("1")
+                ),
+                new TodoAppDataModel("text is random string")
+                        .prepareData(new TodoDataParameters()),
+                // completed field
+                new TodoAppDataModel("completed == true")
+                        .prepareData(
+                                new TodoDataParameters()
+                                        .withCompleted(true)
+                        ),
+                new TodoAppDataModel("completed == false")
+                        .prepareData(
+                                new TodoDataParameters()
+                                        .withCompleted(false)
+                ),
+                new TodoAppDataModel("completed == null")
+                        .prepareData(
+                                new TodoDataParameters()
+                                        .withStatusCode(400)
+                                        .withCompleted(null)
+                ),
         };
     }
 
-    @Test(testName = "integration", dataProvider = "integrationDataProvider")
-    public void integrationTest(TodoAppDataModel dataModel) {
-        webSocketClient.init();
-        // link message list to dataModel
-        dataModel.setMessageList(webSocketClient.getMessageList());
-
-        // post, get, validate
-        apiManager
-                .postTodo(dataModel.getTodoDataList())
-                .getTodo(dataModel.getTodoDataList());
+    @Test(testName = "POST & GET request", dataProvider = "postAndGetDataProvider")
+    public void postAndGetTest(TodoAppDataModel dataModel) {
+        todoAppManager
+                // insert data into todoapp
+                .postTodo(dataModel)
+                // get newly created todos
+                .getTodo(dataModel);
         validationManager
-                .validateTodo(dataModel.getTodoDataList())
-                // validate websocket messages about newly added todos
-                .validateWebsocketMessage(dataModel.getMessageList(), dataModel.getTodoDataList());
+                // validate that actual == expected
+                .validateTodo(dataModel)
+                // if data is invalid it should not be found
+                .validateInvalidTodoIsMissing(dataModel);
+    }
 
-        // put, get, validate
-        dataModel.updateTodoForPut();
-        apiManager
-                .putTodo(dataModel.getTodoDataList())
-                .getTodo(dataModel.getTodoDataList());
+    @DataProvider
+    public Object[] putAndGetDataProvider() {
+        return new Object[] {
+                new TodoAppDataModel("put new text == ''")
+                        .prepareData()
+                        .prepareTodoForPut(
+                                new TodoDataParameters()
+                                        .withText("")
+                ),
+                new TodoAppDataModel("put new text == null")
+                        .prepareData()
+                        .prepareTodoForPut(
+                                new TodoDataParameters()
+                                        .withStatusCode(401)
+                                        .withText(null)
+                ),
+                new TodoAppDataModel("put new text == '   '")
+                        .prepareData()
+                        .prepareTodoForPut(
+                                new TodoDataParameters()
+                                        .withText("   ")
+                ),
+                new TodoAppDataModel("put new text == '&'")
+                        .prepareData()
+                        .prepareTodoForPut(
+                                new TodoDataParameters()
+                                        .withText("&")
+                ),
+                new TodoAppDataModel("put new text == '1'")
+                        .prepareData()
+                        .prepareTodoForPut(
+                                new TodoDataParameters()
+                                        .withText("1")
+                ),
+                new TodoAppDataModel("put new text == random string")
+                        .prepareData()
+                        .prepareTodoForPut(
+                                new TodoDataParameters()
+                ),
+                new TodoAppDataModel("change completed status")
+                        .prepareData()
+                        .prepareTodoForPut(
+                                new TodoDataParameters()
+                                        .withCompleted(true)
+                )
+        };
+    }
+
+    @Test(testName = "PUT & GET request", dataProvider = "putAndGetDataProvider")
+    public void putAndGetTest(TodoAppDataModel dataModel) {
+        // POST request is needed to create existing todos
+        todoAppManager
+                // insert data into todoapp
+                .postTodo(dataModel);
+
+        todoAppManager
+                .putTodo(dataModel)
+                // get updated todos
+                .getTodo(dataModel);
         validationManager
-                .validateTodo(dataModel.getTodoDataList());
+                // validate that actual == expected
+                .validateTodo(dataModel)
+                // if data is invalid it should not be found
+                .validateInvalidTodoIsMissing(dataModel);
+    }
+
+    @DataProvider
+    public Object[] deleteAndGetDataProvider() {
+        return new Object[] {
+                new TodoAppDataModel("regular")
+                        .prepareData(
+                                new TodoDataParameters()
+                )
+        };
+    }
+
+    @Test(testName = "DELETE & GET request", dataProvider = "deleteAndGetDataProvider")
+    public void deleteAndGetTest(TodoAppDataModel dataModel) {
+        // POST request is needed to create existing todos
+        todoAppManager
+                // insert data into todoapp
+                .postTodo(dataModel);
 
         // delete, get, validate
-        apiManager
-                .deleteTodo(dataModel.getTodoDataList())
-                .getTodo(dataModel.getTodoDataList());
+        todoAppManager
+                .deleteTodo(dataModel)
+                .getTodo(dataModel);
         validationManager
-                .validateTodoIsMissing(dataModel.getTodoDataList());
+                .validateTodoIsMissing(dataModel);
     }
 
     @DataProvider
     public Object[] getParametersDataProvider() {
         return new Object[] {
-                new TodoAppDataModel()
-                        .setCaseDescription("only offset")
+                new TodoAppDataModel("only offset")
                         .prepareData(50)
                         .withOffset(10)
                         .calculateExpectedCount(),
-                new TodoAppDataModel()
-                        .setCaseDescription("only limit")
+                new TodoAppDataModel("only limit")
                         .prepareData(200)
                         .withLimit(100)
                         .calculateExpectedCount(),
-                new TodoAppDataModel()
-                        .setCaseDescription("offset & limit > expected count")
+                new TodoAppDataModel("offset & limit > expected count")
                         .prepareData(50)
                         .withOffset(5)
                         .withLimit(46)
                         .calculateExpectedCount(),
-                new TodoAppDataModel()
-                        .setCaseDescription("offset & limit < expected count")
+                new TodoAppDataModel("offset & limit < expected count")
                         .prepareData(50)
                         .withOffset(5)
                         .withLimit(44)
                         .calculateExpectedCount(),
-                new TodoAppDataModel()
-                        .setCaseDescription("offset & limit == expected count")
+                new TodoAppDataModel("offset & limit == expected count")
                         .prepareData(50)
                         .withOffset(5)
                         .withLimit(45)
@@ -121,49 +277,79 @@ public class TodoAppTests extends TestBase {
 
     @Test(testName = "GET parameters", dataProvider = "getParametersDataProvider")
     public void getParametersTest(TodoAppDataModel dataModel) {
-        apiManager
-                .deleteAll()
-                .postTodo(dataModel.getTodoDataList())
-                .getTodo(dataModel.getTodoDataList(), dataModel.getParams());
+        todoAppManager
+                .postTodo(dataModel)
+                .getTodo(dataModel);
         validationManager
-                .validateTodoCount(dataModel.getTodoDataList(), dataModel.getExpectedCount());
+                .validateTodoCount(dataModel);
     }
 
     @DataProvider
     public Object[] postSimplePerformanceDataProvider() {
         return new Object[] {
-                new TodoAppDataModel()
-                        .setCaseDescription("100")
+                new TodoAppDataModel("100")
                         .prepareData(100),
-                new TodoAppDataModel()
-                        .setCaseDescription("1000")
+                new TodoAppDataModel("1000")
                         .prepareData(1000),
-                new TodoAppDataModel()
-                        .setCaseDescription("5000")
+                new TodoAppDataModel("5000")
                         .prepareData(5000),
-                new TodoAppDataModel()
-                        .setCaseDescription("10000")
+                new TodoAppDataModel("10000")
                         .prepareData(10000)
         };
     }
 
     @Test(testName = "POST simple performance", dataProvider = "postSimplePerformanceDataProvider")
     public void postSimplePerformanceTest(TodoAppDataModel dataModel) {
-        apiManager
-                .deleteAll();
-
         long startTime = System.currentTimeMillis();
 
-        apiManager
-                .postTodo(dataModel.getTodoDataList());
+        todoAppManager
+                .postTodo(dataModel);
 
         double secondsSpent = (double) (System.currentTimeMillis() - startTime) / 1000;
 
-        System.out.println("count: " + dataModel.getTodoDataList().size() + ", time spent in seconds: " + secondsSpent);
+        System.out.println("count: " + dataModel.getDataList().size() + ", time spent in seconds: " + secondsSpent);
     }
 
-    @AfterMethod
-    public void closeWebSocketSession() {
-        webSocketClient.closeSession();
+    @DataProvider
+    public Object[] websocketDataProvider() {
+        return new Object[] {
+                new TodoAppDataModel("id and completed values")
+                        .prepareData(
+                                new TodoDataParameters()
+                                        .withId(0L)
+                                        .withText("")
+                                        .withCompleted(true),
+                                new TodoDataParameters()
+                                        .withId(1L)
+                                        .withText("")
+                        ),
+                new TodoAppDataModel("text values")
+                        .prepareData(
+                                new TodoDataParameters(),
+                                new TodoDataParameters()
+                                        .withText("&"),
+                                new TodoDataParameters()
+                                        .withText("   "),
+                                new TodoDataParameters()
+                                        .withText("1"),
+                                new TodoDataParameters()
+                                        .withText("")
+                        )
+        };
+    }
+
+    @Test(testName = "websocket", dataProvider = "websocketDataProvider")
+    public void websocketTest(TodoAppDataModel dataModel) {
+        // open websocket session and link websocket messages list to dataModel
+        webSocketManager
+                .openSession()
+                .linkMessageList(dataModel);
+
+        // post new todos
+        todoAppManager
+                .postTodo(dataModel);
+        // validate websocket messages about newly added todos
+        validationManager
+                .validateWebsocketMessage(dataModel);
     }
 }

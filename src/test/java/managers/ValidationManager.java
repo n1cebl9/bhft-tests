@@ -1,22 +1,30 @@
 package managers;
 
-import dataModels.TodoData;
+import data.TodoData;
+import dataModels.TodoAppDataModel;
 import org.assertj.core.api.Assertions;
 import org.assertj.core.api.SoftAssertions;
 import pojo.Message;
+import pojo.Todo;
 
 import java.util.List;
 
 public class ValidationManager {
 
-    public ValidationManager validateTodo(List<TodoData> todoDataList) {
+    public ValidationManager validateTodo(TodoAppDataModel dataModel) {
         SoftAssertions softAssertions = new SoftAssertions();
 
-        for (TodoData todoData : todoDataList) {
-            softAssertions.assertThat(todoData.getTodoToRetrieve())
+        // check only valid data
+        for (TodoData todoData : dataModel.getDataList().stream().filter(TodoData::isValid).toList()) {
+            // if there is todos for updates use it otherwise use original
+            Todo expected = todoData.getTodoToUpdate() != null && todoData.isValidAfterUpdate()
+                    ? todoData.getTodoToUpdate()
+                    : todoData.getTodoToSent();
+
+            softAssertions.assertThat(todoData.getTodoFromApp())
                     .usingRecursiveComparison()
-                    .as("id = " + todoData.getTodoToInsert().getId())
-                    .isEqualTo(todoData.getTodoToInsert());
+                    .as("id = " + todoData.getTodoToSent().getId())
+                    .isEqualTo(expected);
         }
 
         softAssertions.assertAll();
@@ -24,35 +32,35 @@ public class ValidationManager {
         return this;
     }
 
-    public ValidationManager validateTodoCount(List<TodoData> todoDataList, int expectedCount) {
-        long presentCount = todoDataList.stream().filter(d -> d.getTodoToRetrieve() != null).count();
+    public ValidationManager validateTodoCount(TodoAppDataModel dataModel) {
+        long presentCount = dataModel.getDataList().stream().filter(d -> d.getTodoFromApp() != null).count();
         Assertions.assertThat(presentCount)
                 .as("todos count mismatch")
-                .isEqualTo(expectedCount);
+                .isEqualTo(dataModel.getExpectedCount());
 
         return this;
     }
 
-    public ValidationManager validateWebsocketMessage(List<Message> messageList, List<TodoData> todoDataList) {
+    public ValidationManager validateWebsocketMessage(TodoAppDataModel dataModel) {
         SoftAssertions softAssertions = new SoftAssertions();
 
-        for (TodoData todoData : todoDataList) {
-            Message message = messageList.stream()
-                    .filter(m -> m.getData().getId() == todoData.getTodoToInsert().getId())
+        for (TodoData todoData : dataModel.getDataList()) {
+            Message message = dataModel.getMessageList().stream()
+                    .filter(m -> m.getData().getId().equals(todoData.getTodoToSent().getId()))
                     .findAny()
                     .orElse(null);
 
             if (message == null) {
-                softAssertions.fail("message not found for id = " + todoData.getTodoToInsert().getId());
+                softAssertions.fail("message not found for id = " + todoData.getTodoToSent().getId());
                 continue;
             }
 
             softAssertions.assertThat(message.getData())
                     .usingRecursiveComparison()
-                    .as("message data for id = " + todoData.getTodoToInsert().getId())
-                    .isEqualTo(todoData.getTodoToInsert());
+                    .as("message data for id = " + todoData.getTodoToSent().getId())
+                    .isEqualTo(todoData.getTodoToSent());
             softAssertions.assertThat(message.getType())
-                    .as("message type for id = " + todoData.getTodoToInsert().getId())
+                    .as("message type for id = " + todoData.getTodoToSent().getId())
                     .isEqualTo("new_todo");
         }
 
@@ -61,12 +69,28 @@ public class ValidationManager {
         return this;
     }
 
-    public ValidationManager validateTodoIsMissing(List<TodoData> todoDataList) {
+    public ValidationManager validateTodoIsMissing(TodoAppDataModel dataModel) {
         SoftAssertions softAssertions = new SoftAssertions();
 
-        for (TodoData todoData : todoDataList) {
-            softAssertions.assertThat(todoData.getTodoToRetrieve())
-                    .as("id = " + todoData.getTodoToInsert().getId())
+        // check only valid data
+        for (TodoData todoData : dataModel.getDataList().stream().filter(TodoData::isValid).toList()) {
+            softAssertions.assertThat(todoData.getTodoFromApp())
+                    .as("id = " + todoData.getTodoToSent().getId())
+                    .isNull();
+        }
+
+        softAssertions.assertAll();
+
+        return this;
+    }
+
+    public ValidationManager validateInvalidTodoIsMissing(TodoAppDataModel dataModel) {
+        SoftAssertions softAssertions = new SoftAssertions();
+
+        // check only invalid data
+        for (TodoData todoData : dataModel.getDataList().stream().filter(d -> !d.isValid()).toList()) {
+            softAssertions.assertThat(todoData.getTodoFromApp())
+                    .as("id = " + todoData.getTodoToSent().getId())
                     .isNull();
         }
 

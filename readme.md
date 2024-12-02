@@ -1,7 +1,10 @@
 **Autotests for BHFT**
 
-TODO manager tests (TodoAppTests)
-1. Integration CRUD and websocket checking. Each todo goes through CRUD operations. Autotest retrieves websocket message after POST and checks it.
-2. GET parameters. Offset and limit with different values.
-3. POST simple performance. Autotest checks timing for POST requests in a loop.
+Test framework structure (4 layers)
+1. Core layer (test runner)
+2. Business layer (managers and utils)
+3. Data layer (dataModels to store all test data)
+4. Test layer (test classes e.g. TodoAppTests)
+
+gradle.properties file contains environment variables for tests
 

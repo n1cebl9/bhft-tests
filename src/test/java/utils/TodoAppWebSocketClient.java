@@ -1,6 +1,7 @@
-package ws;
+package utils;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import interfaces.WebSocketInterface;
 import jakarta.websocket.*;
 import lombok.Getter;
 import lombok.SneakyThrows;
@@ -11,7 +12,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 @ClientEndpoint
-public class Client {
+public class TodoAppWebSocketClient implements WebSocketInterface<Message> {
 
     private final URI uri;
     private Session session;
@@ -19,12 +20,12 @@ public class Client {
     @Getter private final List<Message> messageList = new ArrayList<>();
 
     @SneakyThrows
-    public Client(String path) {
+    public TodoAppWebSocketClient(String path) {
         uri = new URI(path);
     }
 
     @SneakyThrows
-    public void init() {
+    public void openSession() {
         WebSocketContainer container = ContainerProvider.getWebSocketContainer();
         session = container.connectToServer(this, uri);
     }

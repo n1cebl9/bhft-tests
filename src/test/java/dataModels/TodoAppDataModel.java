@@ -1,72 +1,85 @@
 package dataModels;
 
+import data.TodoData;
+import data.TodoDataParameters;
 import lombok.Getter;
-import lombok.Setter;
 import org.apache.commons.lang3.RandomStringUtils;
-import org.apache.commons.lang3.StringUtils;
 import pojo.Message;
 import pojo.Todo;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-public class TodoAppDataModel {
+@Getter
+public class TodoAppDataModel extends BaseDataModel<TodoData, Message> {
 
-    private String caseDescription = "";
-    @Getter private final List<TodoData> todoDataList = new ArrayList<>();
-    @Getter private final Map<String, String> params = new HashMap<>();
-    @Getter @Setter private List<Message> messageList;
-    @Getter private int expectedCount;
+    /*
+    dataModel stores all data for tests,
+    it has methods to prepare new data,
+    all data transactions should be made through dataModel to ensure easy access to all test data in all the time
 
-    public TodoAppDataModel prepareData(long id, String text, boolean completed) {
-        TodoData todoData = new TodoData();
+    prepareData is the main method to prepare test data, has some overloads for single and multiple preparations
+     */
 
-        text = StringUtils.isNotEmpty(text)
-                ? text
-                : "";
+    // parameters specific to todoapp
+    private final Map<String, String> params = new HashMap<>();
+    private int expectedCount;
 
-        Todo todo = new Todo(id, text, completed);
+    public TodoAppDataModel(String caseDescription) {
+        this.caseDescription = caseDescription;
+    }
 
-        todoData.setTodoToInsert(todo);
+    // create new todos data and store it in dataList
+    // prepareData method creates TodoData for each TodoDataParameters
+    public TodoAppDataModel prepareData(TodoDataParameters... dataParametersArgs) {
+        for (TodoDataParameters dataParameters : dataParametersArgs) {
+            TodoData todoData = new TodoData();
 
-        todoDataList.add(todoData);
+            int code = dataParameters.getStatusCode();
+            todoData.setStatusCode(code);
+            // if code is not specified data should be counted as valid
+            // additionally 2xx codes are also should be counted as valid
+            todoData.setValid(code == 0 || code == 200 || code == 201 || code == 204);
+
+            Todo todo = new Todo(dataParameters.getId(), dataParameters.getText(), dataParameters.getCompleted());
+
+            todoData.setTodoToSent(todo);
+
+            dataList.add(todoData);
+        }
 
         return this;
     }
 
-    public TodoAppDataModel prepareData(String text) {
-        return prepareData(Long.parseLong(RandomStringUtils.randomNumeric(8)), text, false);
-    }
-
     public TodoAppDataModel prepareData() {
-        return prepareData(RandomStringUtils.randomAlphanumeric(128));
+        return prepareData(new TodoDataParameters());
     }
 
     public TodoAppDataModel prepareData(int count) {
         for (int i = 0; i < count; i++) {
-            prepareData();
+            prepareData(new TodoDataParameters());
         }
 
         return this;
     }
 
-    public TodoAppDataModel updateTodoForPut(String text, boolean completed) {
-        for (TodoData todoData : todoDataList) {
-            todoData.getTodoToInsert().setText(text);
-            todoData.getTodoToInsert().setCompleted(completed);
+    // update existing todos with new values
+    public TodoAppDataModel prepareTodoForPut(TodoDataParameters dataParameters) {
+        for (TodoData todoData : dataList) {
+            int code = dataParameters.getStatusCode();
+            // update status code
+            todoData.setStatusCodeAfterUpdate(code);
+            // update valid
+            todoData.setValidAfterUpdate(code == 0 || code == 200 || code == 201 || code == 204);
+
+            // prepare updated todos
+            Todo todoToUpdate = new Todo();
+            todoToUpdate.setId(todoData.getTodoToSent().getId());
+            todoToUpdate.setText(dataParameters.getText());
+            todoToUpdate.setCompleted(dataParameters.getCompleted());
+            todoData.setTodoToUpdate(todoToUpdate);
         }
-
-        return this;
-    }
-
-    public TodoAppDataModel updateTodoForPut() {
-        return updateTodoForPut(RandomStringUtils.randomAlphanumeric(64), true);
-    }
-
-    public TodoAppDataModel setCaseDescription(String caseDescription) {
-        this.caseDescription = caseDescription;
 
         return this;
     }
@@ -83,18 +96,14 @@ public class TodoAppDataModel {
         return this;
     }
 
+    // retrieve parameters from map and calculate expected count
     public TodoAppDataModel calculateExpectedCount() {
         int offset = params.get("offset") == null ? 0 : Integer.parseInt(params.get("offset"));
         int limit = params.get("limit") == null ? 0 : Integer.parseInt(params.get("limit"));
-        expectedCount = todoDataList.size() - offset;
+        expectedCount = dataList.size() - offset;
         expectedCount = limit != 0 && limit < expectedCount ? limit : expectedCount;
 
         return this;
-    }
-
-    @Override
-    public String toString() {
-        return caseDescription;
     }
 
 }
